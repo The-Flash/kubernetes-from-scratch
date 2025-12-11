@@ -14,7 +14,12 @@ MASTER_IP_START = 10
 NODE_IP_START = 20
 LB_IP_START = 30
 
-def setup_dns(node):
+ram_selector = (RAM_SIZE / 4) * 4
+if ram_selector < 8
+  raise "Unsufficient memory #{RAM_SIZE}GB. min 8GB"
+end
+
+def setup_dns(node)
   # Set up /etc/hosts
   node.vm.provision "setup-hosts", :type => "shell", :path => "ubuntu/vagrant/setup-hosts.sh" do |s|
     s.args = ["enp0s8", node.vm.hostname]
@@ -22,7 +27,7 @@ def setup_dns(node):
   node.vm.provision "setup-dns", type: "shell", :path => "ubuntu/update-dns.sh"
 end
 
-def provision_kubernetes_node(node):
+def provision_kubernetes_node(node)
   node.vm.provision "setup-kernel", :type => "shell", :path => "setup-kernel.sh"
   node.vm.provision "setup-ssh", :type => "shell", :path => "ssh.sh"
 
@@ -62,17 +67,21 @@ Vagrant.configure("2") do |config|
 
   config.vm.box_check_update = false
 
+  # Provision Control Nodes
   (1..NUM_CONTROL_NODES).each do |i|
+    config.vm.define "controlplane0#{i}" do |node|
+      # Name shown in the GUI
       node.vm.provider "virtualbox" do |vb|
         vb.name = "kubernetes-ha-controlplane-#{i}"
         vb.memory = RESOURCES["control"][i > 2 ? 2 : i]["ram"]
         vb.cpus = RESOURCES["control"][i > 2 ? 2 : i]["cpu"]
-      end 
+      end
       node.vm.hostname = "controlplane0#{i}"
       node.vm.network :private_network, ip: IP_NW + "#{MASTER_IP_START + i}"
       node.vm.network "forwarded_port", guest: 22, host: "#{2710 + i}"
       provision_kubernetes_node node
-  end
+     end
+  end  
 
   # Provision Load Balancer Node
   config.vm.define "loadbalancer" do |node|
@@ -90,7 +99,7 @@ Vagrant.configure("2") do |config|
   end
 
   # Provision Worker Nodes
-  (1..NUM_WORKER_NODE).each do |i|
+  (1..NUM_WORKER_NODES).each do |i|
     config.vm.define "node0#{i}" do |node|
       node.vm.provider "virtualbox" do |vb|
         vb.name = "kubernetes-ha-node-#{i}"
