@@ -15,6 +15,11 @@ NODE_IP_START = 20
 LB_IP_START = 30
 
 def setup_dns(node):
+  # Set up /etc/hosts
+  node.vm.provision "setup-hosts", :type => "shell", :path => "ubuntu/vagrant/setup-hosts.sh" do |s|
+    s.args = ["enp0s8", node.vm.hostname]
+  end
+  node.vm.provision "setup-dns", type: "shell", :path => "ubuntu/update-dns.sh"
 end
 
 def provision_kubernetes_node(node):
@@ -22,7 +27,24 @@ def provision_kubernetes_node(node):
   node.vm.provision "setup-ssh", :type => "shell", :path => "ssh.sh"
 
   setup_dns node
-nd
+end
+
+RESOURCES = {
+  "control" => {
+    1 => {
+      "ram" => [ram_selector * 128, 2048].max(),
+      "cpu" => CPU_CORES >= 12 ? 4 : 2,
+    },
+    2 => {
+      "ram" => [ram_selector * 128, 2048].min(),
+      "cpu" => CPU_CORES > 8 ? 2 : 1,
+    },
+  },  
+  "worker" => {
+    "ram" => [ram_selector * 128, 4096].min(),
+    "cpu" => (((CPU_CORES / 4) * 4) - 4) / 4,
+  }
+}
 
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
@@ -40,7 +62,47 @@ Vagrant.configure("2") do |config|
 
   config.vm.box_check_update = false
 
+  (1..NUM_CONTROL_NODES).each do |i|
+      node.vm.provider "virtualbox" do |vb|
+        vb.name = "kubernetes-ha-controlplane-#{i}"
+        vb.memory = RESOURCES["control"][i > 2 ? 2 : i]["ram"]
+        vb.cpus = RESOURCES["control"][i > 2 ? 2 : i]["cpu"]
+      end 
+      node.vm.hostname = "controlplane0#{i}"
+      node.vm.network :private_network, ip: IP_NW + "#{MASTER_IP_START + i}"
+      node.vm.network "forwarded_port", guest: 22, host: "#{2710 + i}"
+      provision_kubernetes_node node
+  end
 
+  # Provision Load Balancer Node
+  config.vm.define "loadbalancer" do |node|
+    node.vm.provider "virtualbox" do |vb|
+      vb.name = "kubernetes-ha-lb"
+      vb.memory = 512
+      vb.cpus = 1
+    end
+    node.vm.hostname = "loadbalancer"
+    node.vm.network :private_network, ip: IP_NW + "#{LB_IP_START}"
+    node.vm.network "forwarded_port", guest: 22, host: 2730
+    # Set up ssh
+    node.vm.provision "setup-ssh", :type => "shell", :path => "ubuntu/ssh.sh"
+    setup_dns node
+  end
+
+  # Provision Worker Nodes
+  (1..NUM_WORKER_NODE).each do |i|
+    config.vm.define "node0#{i}" do |node|
+      node.vm.provider "virtualbox" do |vb|
+        vb.name = "kubernetes-ha-node-#{i}"
+        vb.memory = RESOURCES["worker"]["ram"]
+        vb.cpus = RESOURCES["worker"]["cpu"]
+      end
+      node.vm.hostname = "node0#{i}"
+      node.vm.network :private_network, ip: IP_NW + "#{NODE_IP_START + i}"
+      node.vm.network "forwarded_port", guest: 22, host: "#{2720 + i}"
+      provision_kubernetes_node node
+    end
+  end
   # Disable automatic box update checking. If you disable this, then
   # boxes will only be checked for updates when the user runs
   # `vagrant box outdated`. This is not recommended.
