@@ -21,10 +21,10 @@ end
 
 def setup_dns(node)
   # Set up /etc/hosts
-  node.vm.provision "setup-hosts", :type => "shell", :path => "ubuntu/vagrant/setup-hosts.sh" do |s|
+  node.vm.provision "setup-hosts", :type => "shell", :path => "setup-hosts.sh" do |s|
     s.args = ["enp0s8", node.vm.hostname]
   end
-  node.vm.provision "setup-dns", type: "shell", :path => "ubuntu/update-dns.sh"
+  node.vm.provision "setup-dns", type: "shell", :path => "update-dns.sh"
 end
 
 def provision_kubernetes_node(node)
