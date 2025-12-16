@@ -94,7 +94,7 @@ Vagrant.configure("2") do |config|
     node.vm.network :private_network, ip: IP_NW + "#{LB_IP_START}"
     node.vm.network "forwarded_port", guest: 22, host: 2730
     # Set up ssh
-    node.vm.provision "setup-ssh", :type => "shell", :path => "ubuntu/ssh.sh"
+    node.vm.provision "setup-ssh", :type => "shell", :path => "ssh.sh"
     setup_dns node
   end
 
